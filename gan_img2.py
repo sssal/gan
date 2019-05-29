@@ -16,11 +16,7 @@ def plot(samples):
     for i, sample in enumerate(samples):
         ax = plt.subplot(gs[i])
         plt.axis('off')
-        ax.set_xticklabels([])
-        ax.set_yticklabels([])
-        ax.set_aspect('equal')
-        # sample = sample*255
-        sample = af_processing(sample)
+        sample = af_processing_rgb(sample)
         plt.imshow(sample, cmap='Greys_r')
 
     return fig
@@ -33,8 +29,8 @@ def xavier_init(size):
 
 
 # 判别模型的输入和参数初始化
-X = tf.placeholder(tf.float32, shape=[None, 2304])
-D_W1 = tf.Variable(xavier_init([2304, 128]))
+X = tf.placeholder(tf.float32, shape=[None, 6912])
+D_W1 = tf.Variable(xavier_init([6912, 128]))
 D_b1 = tf.Variable(tf.zeros(shape=[128]))
 D_W2 = tf.Variable(xavier_init([128, 1]))
 D_b2 = tf.Variable(tf.zeros(shape=[1]))
@@ -44,8 +40,8 @@ theta_D = [D_W1, D_W2, D_b1, D_b2]
 Z = tf.placeholder(tf.float32, shape=[None, 100])
 G_W1 = tf.Variable(xavier_init([100, 128]))
 G_b1 = tf.Variable(tf.zeros(shape=[128]))
-G_W2 = tf.Variable(xavier_init([128, 2304]))
-G_b2 = tf.Variable(tf.zeros(shape=[2304]))
+G_W2 = tf.Variable(xavier_init([128, 6912]))
+G_b2 = tf.Variable(tf.zeros(shape=[6912]))
 theta_G = [G_W1, G_W2, G_b1, G_b2]
 
 
@@ -78,8 +74,6 @@ D_loss = D_loss_real + D_loss_fake
 G_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.ones_like(D_logit_fake)))
 
 # adam算法的优化器
-# 动态调整每个参数的学习率。Adam的优点主要在于经过偏置校正后，每一次迭代学习率
-# 都有个确定范围，使得参数比较平稳。
 D_solver = tf.train.AdamOptimizer().minimize(D_loss, var_list=theta_D)
 G_solver = tf.train.AdamOptimizer().minimize(G_loss, var_list=theta_G)
 
@@ -90,7 +84,7 @@ input_height = 96
 output_width = 48
 output_height = 48
 z_dim = 100
-
+is_train = True
 data_path = r'./data/faces/*.jpg'
 
 if __name__ == '__main__':
@@ -98,27 +92,35 @@ if __name__ == '__main__':
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
 
+    # if not is_train:
+    #     model_file = tf.train.latest_checkpoint()
+    #     saver.res
+
     i = 0
     for epoch in range(max_epoch):
         data = glob(data_path)
         np.random.shuffle(data)
         for idx in range(1, 700):
             batch_files = data[idx * batch_size:(idx + 1) * batch_size]
-            batch = [pre_processing(batch_file) for batch_file in batch_files]
+            batch = [pre_processing_rgb(batch_file) for batch_file in batch_files]
             batch_images = np.array(batch).astype(np.float32)  # 真实样本
             batch_z = np.random.uniform(-1, 1, [batch_size, z_dim]).astype(np.float32)
 
             _, D_loss_curr = sess.run([D_solver, D_loss], feed_dict={X: batch_images, Z: batch_z})
             _, G_loss_curr = sess.run([G_solver, G_loss], feed_dict={Z: batch_z})
 
-            if (idx % 100 == 0):
+            if idx % 100 == 0:
                 print(idx)
                 print('D loss: {:.4}'.format(D_loss_curr))
                 print('G_loss: {:.4}'.format(G_loss_curr))
 
-            if (idx % 100 == 0):
+            if idx % 100 == 0:
                 samples = sess.run(G_sample, feed_dict={Z: batch_z})
                 fig = plot(samples)
-                plt.savefig('out1/{}.png'.format(str(i).zfill(3)), bbox_inches='tight')
+                plt.savefig('out2/{}.png'.format(str(i).zfill(3)), bbox_inches='tight')
                 i += 1
                 plt.close(fig)
+
+        # if epoch%100 == 0:
+        #     saver = tf.train.Saver()
+        #     save_path = saver.save(sess,"model/gan%d.ckpt"%(epoch/100))
